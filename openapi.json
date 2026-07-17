@@ -1,0 +1,410 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Shrtr API",
+        "version": "1.0.0",
+        "summary": "Free URL shortener REST API — no signup required.",
+        "description": "Public JSON API for creating short links and reading their click stats. No authentication; rate-limited per client IP. All errors use RFC 7807 (`application/problem+json`). The `/api/v1/` prefix is stable; breaking changes ship under `/api/v2/`.",
+        "contact": {
+            "name": "Shrtr support",
+            "email": "support@shrtr.top"
+        },
+        "termsOfService": "https://shrtr.top/terms"
+    },
+    "externalDocs": {
+        "description": "Human-readable API reference",
+        "url": "https://shrtr.top/api"
+    },
+    "servers": [
+        {
+            "url": "https://shrtr.top/api/v1",
+            "description": "API base URL"
+        }
+    ],
+    "paths": {
+        "/shorten": {
+            "post": {
+                "summary": "Create a short link",
+                "operationId": "shorten",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ShortenRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Short link created.",
+                        "headers": {
+                            "Location": {
+                                "description": "The new short URL.",
+                                "schema": {
+                                    "type": "string",
+                                    "format": "uri"
+                                }
+                            },
+                            "X-RateLimit-Limit": {
+                                "schema": {
+                                    "type": "integer"
+                                }
+                            },
+                            "X-RateLimit-Remaining": {
+                                "schema": {
+                                    "type": "integer"
+                                }
+                            },
+                            "X-RateLimit-Reset": {
+                                "description": "Unix timestamp when the rate-limit window resets.",
+                                "schema": {
+                                    "type": "integer"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShortenResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Malformed request: wrong Content-Type, oversized body, or invalid JSON.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "The requested alias is already taken.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Either DTO validation failed (body carries an `errors` map keyed by property path — note the wire field `alias` validates under the path `customAlias`), or the service rejected the URL (denylist / DNS blocklist / points back to this service; body carries only `detail`, e.g. \"This URL is not allowed.\" or \"URL must not point to this service.\").",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ValidationProblem"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded.",
+                        "headers": {
+                            "Retry-After": {
+                                "description": "Seconds to wait before retrying.",
+                                "schema": {
+                                    "type": "integer"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RateLimitProblem"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Could not allocate a unique code; retry shortly.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/stats/{code}": {
+            "get": {
+                "summary": "Get click stats for a short link",
+                "operationId": "stats",
+                "parameters": [
+                    {
+                        "name": "code",
+                        "in": "path",
+                        "required": true,
+                        "description": "The short link code.",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{3,14}[A-Za-z0-9]$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Click stats for the link. Cacheable for 60 seconds.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StatsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "No short link exists with that code.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "410": {
+                        "description": "The link exists but is inactive; the `reason` extension says why.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GoneProblem"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded.",
+                        "headers": {
+                            "Retry-After": {
+                                "description": "Seconds to wait before retrying.",
+                                "schema": {
+                                    "type": "integer"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RateLimitProblem"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "summary": "Liveness probe",
+                "operationId": "health",
+                "responses": {
+                    "200": {
+                        "description": "Service is up.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HealthResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ShortenRequest": {
+                "type": "object",
+                "required": [
+                    "url"
+                ],
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "format": "uri",
+                        "maxLength": 2048,
+                        "description": "Destination URL. Must be http or https and include a host.",
+                        "example": "https://example.com/some/long/path"
+                    },
+                    "alias": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "minLength": 5,
+                        "maxLength": 16,
+                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$",
+                        "description": "Optional custom code, 5–16 characters: letters, digits and hyphens, starting and ending with a letter or digit. Input is case-insensitive — it is lowercased server-side, so the stored code is always lowercase.",
+                        "example": "my-link"
+                    }
+                }
+            },
+            "ShortenResponse": {
+                "type": "object",
+                "required": [
+                    "code",
+                    "short_url",
+                    "original_url",
+                    "created_at"
+                ],
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "example": "ab3k9xz"
+                    },
+                    "short_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "example": "https://shrtr.top/s/ab3k9xz"
+                    },
+                    "original_url": {
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "StatsResponse": {
+                "type": "object",
+                "required": [
+                    "code",
+                    "clicks_count",
+                    "last_clicked_at",
+                    "created_at",
+                    "enabled"
+                ],
+                "properties": {
+                    "code": {
+                        "type": "string"
+                    },
+                    "clicks_count": {
+                        "type": "integer"
+                    },
+                    "last_clicked_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "HealthResponse": {
+                "type": "object",
+                "required": [
+                    "status"
+                ],
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "example": "ok"
+                    }
+                }
+            },
+            "Problem": {
+                "type": "object",
+                "description": "RFC 7807 problem document.",
+                "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail"
+                ],
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "example": "about:blank"
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "Bad Request"
+                    },
+                    "status": {
+                        "type": "integer",
+                        "example": 400
+                    },
+                    "detail": {
+                        "type": "string"
+                    }
+                }
+            },
+            "ValidationProblem": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "errors": {
+                                "type": "object",
+                                "description": "Present only on DTO-validation failures. Keyed by property path (`url`, `customAlias`); each value is an array of message strings.",
+                                "additionalProperties": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ]
+            },
+            "RateLimitProblem": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "retry_after": {
+                                "type": "integer",
+                                "description": "Seconds to wait before retrying (also sent as the Retry-After header)."
+                            }
+                        }
+                    }
+                ]
+            },
+            "GoneProblem": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/Problem"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "reason": {
+                                "type": "string",
+                                "enum": [
+                                    "disabled",
+                                    "expired",
+                                    "exhausted"
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    }
+}
