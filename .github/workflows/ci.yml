@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *" # daily 06:17 UTC — drift + live read-only smoke
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Hermetic checks — no network to the live API, safe on every push/PR.
+  # Contract test runs the examples against a Prism mock built from the
+  # vendored openapi.json, so POST /shorten never touches production.
+  contract:
+    name: Lint spec + contract-test examples (mock)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+
+      - name: Lint OpenAPI spec (3.1)
+        run: npx --yes @redocly/cli@1 lint openapi.json
+
+      - name: Syntax-check examples (no execution)
+        run: |
+          bash -n examples/curl/shorten.sh
+          python3 -m py_compile examples/python/shrtr.py
+          node --check examples/javascript/shrtr.mjs
+          (cd examples/go && go vet ./...)
+
+      - name: Start Prism mock from openapi.json
+        run: |
+          npx --yes @stoplight/prism-cli@5 mock openapi.json -p 4010 --errors > prism.log 2>&1 &
+          echo $! > prism.pid
+          # Prism may or may not honour the server basePath; probe both and
+          # export whichever answers /health so the examples hit the right base.
+          base=""
+          for _ in $(seq 1 30); do
+            for cand in "http://127.0.0.1:4010" "http://127.0.0.1:4010/api/v1"; do
+              if curl -sf "$cand/health" >/dev/null 2>&1; then base="$cand"; break 2; fi
+            done
+            sleep 1
+          done
+          if [ -z "$base" ]; then echo "Prism mock did not come up:"; cat prism.log; exit 1; fi
+          echo "SHRTR_BASE=$base" >> "$GITHUB_ENV"
+          echo "mock ready at $base"
+
+      - name: Run examples against the mock (contract test)
+        env:
+          SHRTR_BASE: ${{ env.SHRTR_BASE }}
+        run: |
+          set -euo pipefail
+          echo "── curl";   bash examples/curl/shorten.sh
+          echo "── python"; python3 examples/python/shrtr.py
+          echo "── node";   node examples/javascript/shrtr.mjs
+          echo "── go";     (cd examples/go && go run .)
+
+      - name: Stop Prism mock
+        if: always()
+        run: kill "$(cat prism.pid)" 2>/dev/null || true
+
+  # Reality check — runs on a schedule and on manual dispatch only (never on
+  # push), and is strictly READ-ONLY against production (no POST /shorten, so
+  # no real links are created).
+  drift-and-live:
+    name: Spec drift + live read-only smoke
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vendored openapi.json matches the live spec
+        run: |
+          set -euo pipefail
+          curl -sf https://shrtr.top/openapi.json -o live-openapi.json
+          jq -S . openapi.json      > vendored.norm.json
+          jq -S . live-openapi.json > live.norm.json
+          if ! diff -u vendored.norm.json live.norm.json; then
+            echo "::error::Vendored openapi.json has drifted from the live spec. Refresh it: curl https://shrtr.top/openapi.json -o openapi.json && commit."
+            exit 1
+          fi
+          echo "vendored spec matches live ✓"
+
+      - name: Live read-only smoke (no writes to prod)
+        run: |
+          set -euo pipefail
+          echo "GET /health"
+          curl -sf https://shrtr.top/api/v1/health | jq -e '.status == "ok"'
+
+          echo "GET /stats/{unknown} → 404 problem+json contract"
+          status=$(curl -s -o body.json -w '%{http_code}' https://shrtr.top/api/v1/stats/zzzcinotfound)
+          [ "$status" = "404" ] || { echo "expected 404 for an unknown code, got $status"; cat body.json; exit 1; }
+          jq -e 'has("type") and has("title") and has("status") and has("detail")' body.json

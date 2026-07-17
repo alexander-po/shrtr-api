@@ -1,5 +1,7 @@
 # Shrtr API — client examples
 
+[![CI](https://github.com/alexander-po/shrtr-api/actions/workflows/ci.yml/badge.svg)](https://github.com/alexander-po/shrtr-api/actions/workflows/ci.yml)
+
 Official, zero-dependency examples for the **[Shrtr](https://shrtr.top)** URL-shortener JSON API.
 
 [Shrtr](https://shrtr.top) turns long URLs into short links with instant QR codes. The API is **free, anonymous (no API key, no signup), CORS-enabled, and rate-limited per IP**. Errors follow [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807) (`application/problem+json`).
@@ -72,7 +74,14 @@ Each is a single file, **no dependencies**, with a tiny reusable client plus a r
 | JavaScript (Node 18+) | [`examples/javascript/shrtr.mjs`](examples/javascript/shrtr.mjs) | `node examples/javascript/shrtr.mjs` |
 | Go | [`examples/go/main.go`](examples/go/main.go) | `cd examples/go && go run .` |
 
+Every example honours a **`SHRTR_BASE`** environment variable (default `https://shrtr.top/api/v1`) — point it at a self-hosted instance or a mock server (this repo's CI runs the examples against a [Prism](https://github.com/stoplightio/prism) mock built from `openapi.json`, so tests never touch production).
+
 **PHP, Rust, and others — contributions welcome** (see [Contributing](#contributing)).
+
+## Continuous integration
+
+- **On every push/PR** (hermetic, no network to the live API): lint `openapi.json` as OpenAPI 3.1, syntax-check every example, and **contract-test** the examples against a Prism mock generated from the spec.
+- **Daily + on demand** (read-only against production): re-download the live `https://shrtr.top/openapi.json` and fail if the vendored copy has **drifted**, plus a read-only smoke of `GET /health` and the `GET /stats/{unknown}` → `404` problem+json contract. No `POST` is ever made in CI, so no real links are created.
 
 ## Contributing
 

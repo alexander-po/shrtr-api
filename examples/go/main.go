@@ -15,12 +15,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
-const base = "https://shrtr.top/api/v1"
+var base = envOr("SHRTR_BASE", "https://shrtr.top/api/v1")
 
 var client = &http.Client{Timeout: 10 * time.Second}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
 
 // ShortLink is the POST /shorten success payload.
 type ShortLink struct {

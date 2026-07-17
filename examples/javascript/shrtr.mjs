@@ -7,7 +7,9 @@
 // problem+json and surface here as ShrtrError. Uses the built-in `fetch`
 // (Node 18+ or any modern browser) — nothing to install.
 
-const BASE = "https://shrtr.top/api/v1";
+const BASE =
+  (typeof process !== "undefined" && process.env.SHRTR_BASE) ||
+  "https://shrtr.top/api/v1";
 
 export class ShrtrError extends Error {
   constructor(status, problem) {

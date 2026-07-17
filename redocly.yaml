@@ -1,0 +1,6 @@
+# Lint config for `redocly lint openapi.json` (see .github/workflows/ci.yml).
+# `minimal` keeps only structural/spec-conformance rules so CI fails on a
+# genuinely broken spec, not on stylistic opinions — the spec is generated
+# and served by shrtr.top, so it's valid by construction; this is a guard.
+extends:
+  - minimal

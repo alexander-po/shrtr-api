@@ -11,10 +11,11 @@ Uses only the standard library (urllib) — nothing to install.
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 
-BASE = "https://shrtr.top/api/v1"
+BASE = os.environ.get("SHRTR_BASE", "https://shrtr.top/api/v1")
 
 
 class ShrtrError(Exception):
