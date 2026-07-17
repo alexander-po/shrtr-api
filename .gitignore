@@ -5,6 +5,5 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Go build output
-examples/go/go.sum
-/examples/go/shrtr-example
+# Go build output (from `go build`; the demo uses `go run .`, which produces none)
+/examples/go/go

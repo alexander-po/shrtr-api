@@ -58,9 +58,9 @@ All errors are `application/problem+json` (RFC 7807):
   "detail": "The request body failed validation.", "errors": { "url": ["This is not a valid URL."] } }
 ```
 
-- `422` validation → a top-level `errors` map keyed by field (note the JSON field is `alias` but its error key is `customAlias`); a URL rejected by the service instead carries only `detail`.
+- `422` validation → a top-level `errors` map keyed by field (note the JSON field is `alias` but its error key is `customAlias`); a URL rejected by the service (a blocked or unsafe destination) instead carries only `detail` (e.g. `This URL is not allowed.`).
 - `410` on stats → the link exists but is inactive; a `reason` extension is one of `disabled` / `expired` / `exhausted`.
-- `429` → includes a `retry_after` (seconds) extension and the `Retry-After` header.
+- `429` → includes a `retry_after` (seconds) extension and the `Retry-After` header. Beyond the per-IP limits, `POST /shorten` can also `429` from a per-destination burst limit (the same destination shortened too many times in a day).
 - Other statuses: `400` (malformed request), `409` (alias taken), `503` (rare code-generation retry).
 
 ## Examples
@@ -72,7 +72,7 @@ Each is a single file, **no dependencies**, with a tiny reusable client plus a r
 | curl / bash | [`examples/curl/shorten.sh`](examples/curl/shorten.sh) | `bash examples/curl/shorten.sh` (needs `jq`) |
 | Python (stdlib) | [`examples/python/shrtr.py`](examples/python/shrtr.py) | `python3 examples/python/shrtr.py` |
 | JavaScript (Node 18+) | [`examples/javascript/shrtr.mjs`](examples/javascript/shrtr.mjs) | `node examples/javascript/shrtr.mjs` |
-| Go | [`examples/go/main.go`](examples/go/main.go) | `cd examples/go && go run .` |
+| Go (1.21+) | [`examples/go/main.go`](examples/go/main.go) | `cd examples/go && go run .` |
 
 Every example honours a **`SHRTR_BASE`** environment variable (default `https://shrtr.top/api/v1`) — point it at a self-hosted instance or a mock server (this repo's CI runs the examples against a [Prism](https://github.com/stoplightio/prism) mock built from `openapi.json`, so tests never touch production).
 
@@ -81,7 +81,7 @@ Every example honours a **`SHRTR_BASE`** environment variable (default `https://
 ## Continuous integration
 
 - **On every push/PR** (hermetic, no network to the live API): lint `openapi.json` as OpenAPI 3.1, syntax-check every example, and **contract-test** the examples against a Prism mock generated from the spec.
-- **Daily + on demand** (read-only against production): re-download the live `https://shrtr.top/openapi.json` and fail if the vendored copy has **drifted**, plus a read-only smoke of `GET /health` and the `GET /stats/{unknown}` → `404` problem+json contract. No `POST` is ever made in CI, so no real links are created.
+- **Daily + on demand** (read-only against production): re-download the live `https://shrtr.top/openapi.json` and fail if the vendored copy has **drifted**, plus a read-only smoke of `GET /health` and the `GET /stats/{unknown}` → `404` problem+json contract. No `POST` is ever made against production, so CI never creates real links.
 
 ## Contributing
 
