@@ -1,0 +1,145 @@
+// Shrtr API client example for YLang 2.3.0
+// Uses the standard HTTP and JSON namespaces.
+// Requires libcurl development files when building the executable.
+
+function api_base() -> string {
+    let string configured = env.get("SHRTR_BASE");
+
+    if (string.length(configured) == 0) {
+        return "https://shrtr.top/api/v1";
+    }
+
+    return configured;
+}
+
+function show_api_error(borrowed_string body) -> void {
+    print("HTTP error:", http.status());
+
+    if (json.valid(body)) {
+        let owned_string detail = json.get_string(body, "detail");
+        let owned_string title = json.get_string(body, "title");
+
+        if (string.length(detail) > 0) {
+            print(detail);
+        } else if (string.length(title) > 0) {
+            print(title);
+        } else {
+            print(body);
+        }
+    } else {
+        print(body);
+    }
+}
+
+function build_shorten_body(string url, string alias) -> owned_string {
+    let owned_string empty_object = json.object();
+    let owned_string encoded_url = json.escape(url);
+    let owned_string with_url = json.set(empty_object, "url", encoded_url);
+
+    if (string.length(alias) > 0) {
+        let owned_string encoded_alias = json.escape(alias);
+        return json.set(with_url, "alias", encoded_alias);
+    }
+
+    return move(with_url);
+}
+
+function shorten(string url, string alias) -> owned_string {
+    let string endpoint = string.concat(api_base(), "/shorten");
+    let owned_string body = build_shorten_body(url, alias);
+
+    let owned_string response = http.post(endpoint, body);
+
+    if (string.length(http.last_error()) > 0) {
+        print("Network error:", http.last_error());
+        return string.own("");
+    }
+
+    if (http.status() < 200 or http.status() >= 300) {
+        show_api_error(response);
+        return string.own("");
+    }
+
+    if (not json.valid(response)) {
+        print("Invalid JSON response from Shrtr.");
+        return string.own("");
+    }
+
+    return move(response);
+}
+
+function stats(borrowed_string code) -> bool {
+    if (string.length(code) == 0) {
+        print("Error: empty link code.");
+        return false;
+    }
+
+    let string endpoint = string.concat(
+        string.concat(api_base(), "/stats/"),
+        code
+    );
+
+    let owned_string response = http.get(endpoint);
+
+    if (string.length(http.last_error()) > 0) {
+        print("Network error:", http.last_error());
+        return false;
+    }
+
+    if (http.status() < 200 or http.status() >= 300) {
+        show_api_error(response);
+        return false;
+    }
+
+    if (not json.valid(response)) {
+        print("Invalid JSON response from Shrtr.");
+        return false;
+    }
+
+    print("Click statistics");
+    print("----------------");
+
+    print("Code:", json.get_string(response, "code"));
+    print("Clicks:", json.get_int(response, "clicks_count"));
+    print("Enabled:", json.get_bool(response, "enabled"));
+
+    let owned_string last_clicked_at = json.get(response, "last_clicked_at");
+    if (last_clicked_at == "null") {
+        print("Last clicked: never");
+    } else {
+        print("Last clicked:", json.get_string(response, "last_clicked_at"));
+    }
+
+    return true;
+}
+
+function main() -> int {
+    print("Shrtr API - YLang Client");
+    print("-----------------------");
+
+    let owned_string created = shorten(
+        "https://example.com/some/long/path",
+        ""
+    );
+
+    if (string.length(created) == 0) {
+        return 1;
+    }
+
+    let owned_string code = json.get_string(created, "code");
+    let owned_string short_url = json.get_string(created, "short_url");
+
+    if (string.length(code) == 0 or string.length(short_url) == 0) {
+        print("Invalid shorten response: missing code or short_url.");
+        return 1;
+    }
+
+    print("Short URL:", short_url);
+    print("");
+
+    if (not stats(code)) {
+        return 1;
+    }
+
+    return 0;
+}

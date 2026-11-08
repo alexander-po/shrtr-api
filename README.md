@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/alexander-po/shrtr-api/actions/workflows/ci.yml/badge.svg)](https://github.com/alexander-po/shrtr-api/actions/workflows/ci.yml)
 
-Official, zero-dependency examples for the **[Shrtr](https://shrtr.top)** URL-shortener JSON API.
+Official client examples for the **[Shrtr](https://shrtr.top)** URL-shortener JSON API.
 
 [Shrtr](https://shrtr.top) turns long URLs into short links with instant QR codes. The API is **free, anonymous (no API key, no signup), CORS-enabled, and rate-limited per IP**. Errors follow [RFC 7807](https://datatracker.ietf.org/doc/html/rfc7807) (`application/problem+json`).
 
@@ -65,7 +65,7 @@ All errors are `application/problem+json` (RFC 7807):
 
 ## Examples
 
-Each is a single file, **no dependencies**, with a tiny reusable client plus a runnable demo:
+Each example is a single file with a tiny reusable client and a runnable demo; runtime requirements are listed below:
 
 | Language | File | Run |
 |----------|------|-----|
@@ -73,19 +73,20 @@ Each is a single file, **no dependencies**, with a tiny reusable client plus a r
 | Python (stdlib) | [`examples/python/shrtr.py`](examples/python/shrtr.py) | `python3 examples/python/shrtr.py` |
 | JavaScript (Node 18+) | [`examples/javascript/shrtr.mjs`](examples/javascript/shrtr.mjs) | `node examples/javascript/shrtr.mjs` |
 | Go (1.21+) | [`examples/go/main.go`](examples/go/main.go) | `cd examples/go && go run .` |
+| YLang 2.3.0 | [`examples/ylang/main.yl`](examples/ylang/main.yl) | `ylang build examples/ylang/main.yl -o shrtr-ylang && ./shrtr-ylang` (requires GCC/Clang and libcurl development files) |
 
-Every example honours a **`SHRTR_BASE`** environment variable (default `https://shrtr.top/api/v1`) — point it at a self-hosted instance or a mock server (this repo's CI runs the examples against a [Prism](https://github.com/stoplightio/prism) mock built from `openapi.json`, so tests never touch production).
+Every example honours a **`SHRTR_BASE`** environment variable (default `https://shrtr.top/api/v1`) — point it at a self-hosted instance or a mock server (this repo's CI runs the examples against a [Prism](https://github.com/stoplightio/prism) mock built from `openapi.json`, so tests never touch production). The YLang example requires YLang 2.3.0, a C compiler, and libcurl development files. Running it without `SHRTR_BASE` creates a real short link on the production service; use the Prism mock for safe testing.
 
 **PHP, Rust, and others — contributions welcome** (see [Contributing](#contributing)).
 
 ## Continuous integration
 
-- **On every push/PR** (hermetic, no network to the live API): lint `openapi.json` as OpenAPI 3.1, syntax-check every example, and **contract-test** the examples against a Prism mock generated from the spec.
+- **On every push/PR** (hermetic, no network to the live API): lint `openapi.json` as OpenAPI 3.1, syntax-check every example, build the pinned YLang 2.3.0 compiler, and **contract-test** all examples against a Prism mock generated from the spec.
 - **Daily + on demand** (read-only against production): re-download the live `https://shrtr.top/openapi.json` and fail if the vendored copy has **drifted**, plus a read-only smoke of `GET /health` and the `GET /stats/{unknown}` → `404` problem+json contract. No `POST` is ever made against production, so CI never creates real links.
 
 ## Contributing
 
-The examples are intentionally minimal and dependency-free so they never rot. A new-language example should follow the same shape: one file, a small client (`shorten` / `stats`), a runnable demo, and RFC 7807 error handling. Open a PR.
+The examples are intentionally minimal so they are easy to review and maintain; language-specific runtime requirements are documented above. A new-language example should follow the same shape: one file, a small client (`shorten` / `stats`), a runnable demo, and RFC 7807 error handling. Open a PR.
 
 ## About
 
